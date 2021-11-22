@@ -140,12 +140,18 @@ double RMSE(double *a, double *b, size_t size)
 
 int test()
 {
+    int result = -1.0;
     double A[9] = {81.0, -45.0, 45.0, -45.0, 50.0, -15.0, 45.0, -15.0, 38};
     double v[3] = {1.0, 1.0, 1.0};
     double *x = cholesky(A, v, 3);
     double *expected = dot(A, x, 3);
 
-    return RMSE(v, expected, 3) < EPS;
+    result = RMSE(v, expected, 3) < EPS;
+
+    free(expected);
+    free(x);
+
+    return result;
 }
 
 int main(int argc, char *argv[])
