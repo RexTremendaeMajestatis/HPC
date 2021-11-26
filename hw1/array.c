@@ -3,59 +3,56 @@
 #include "math.h"
 #include "conio.h"
 #include "omp.h"
+#include "time.h"
+#include <stdint.h>
 
-double serial_sum(double *A, size_t start, size_t end, size_t size)
+double sum1(double *v, size_t row, size_t start, size_t end, size_t size)
 {
-    if (end - start + 1 <= 0)
+    double res = 0;
+
+    for (size_t i = start; i < end; i++)
     {
-        return 0;
+        res += v[(row * size) + i];
     }
 
-    if (end - start + 1 == 1)
-    {
-        return A[start];
-    }
-
-    size_t middle = (end - start) / 2;
-    return serial_sum(A, start, start + middle, size) + serial_sum(A, start + middle + 1, end, size);
+    return res;
 }
 
-double parallel_sum(double *A, size_t start, size_t end, size_t size)
+double parallel_sum1(double *v, size_t row, size_t start, size_t end, size_t size)
 {
-    if (end - start + 1 <= 10)
+    if (end - start + 1 < 100000)
     {
-        return serial_sum(A, start, end, size);
+        return sum1(v, row, start, end, size);
     }
 
     size_t middle = (end - start) / 2;
     double left, right;
+    printf("%d \n\r", middle);
 #pragma omp task shared(left)
-    {
-        left = parallel_sum(A, start, start + middle, size);
-    }
+    left = parallel_sum1(v, row, start, start + middle, size);
 #pragma omp task shared(right)
-    {
-        right = parallel_sum(A, start + middle + 1, end, size);
-    }
+    right = parallel_sum1(v, row, start + middle + 1, end, size);
 #pragma omp taskwait
     left += right;
     return left;
 }
 
-int main(int argc, char *argv[])
+double array_sum1(double *v, size_t row, size_t start, size_t end, size_t size)
 {
-    omp_set_num_threads(4);
-
-    size_t n = 1000000000;
-    double *A = (double *)malloc(n * sizeof(double));
-    for (size_t i = 0; i < n; i++)
-    {
-        A[i] = i;
-    }
+    double total;
 #pragma omp parallel
 #pragma omp single nowait
+    total = parallel_sum1(v, row, start, end, size);
+    return total;
+}
+
+int main(int argc, char *argv[])
+{
+    // omp_set_num_threads(4);
+
+    for (int64_t j = -1; j >= 0; j--)
     {
-        printf("%f\n\r", parallel_sum(A, 0, n - 1, n));
+        printf("%d \n\r", j);
     }
     return 0;
 }
