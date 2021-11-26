@@ -31,105 +31,20 @@ void print_m(double *A, size_t size)
     printf("\n\r");
 }
 
-double serial_sum1(double *A, size_t row, size_t start, size_t end, size_t size)
-{
-    size_t length = end - start + 1;
-    if (length == 0)
-    {
-        return 0;
-    }
 
-    if (length == 1)
-    {
-        double temp = A[li(row, start, size)];
-        return temp * temp;
-    }
-
-    size_t middle = (end - start) / 2;
-
-    return serial_sum1(A, row, start, start + middle, size) + serial_sum1(A, row, start + middle + 1, end, size);
-}
-
-double serial_sum2(double *A, size_t row1, size_t row2, size_t start, size_t end, size_t size)
-{
-    size_t length = end - start + 1;
-    if (length == 0)
-    {
-        return 0;
-    }
-
-    if (length == 1)
-    {
-        double temp = A[li(row1, start, size)] * A[li(row2, start, size)];
-        return temp;
-    }
-
-    size_t middle = (end - start) / 2;
-
-    return serial_sum2(A, row1, row2, start, start + middle, size) + serial_sum2(A, row1, row2, start + middle + 1, end, size);
-}
-
-double parallel_sum1(double *A, size_t row, size_t start, size_t end, size_t size)
-{
-    size_t length = end - start + 1;
-    if (length < CUTOFF)
-    {
-        return serial_sum1(A, row, start, end, size);
-    }
-
-    double left;
-    double right;
-    size_t middle = (end - start) / 2;
-#pragma omp task shared(left)
-    left = parallel_sum1(A, row, start, middle, size);
-#pragma omp task shared(right)
-    right = parallel_sum1(A, row, middle + 1, end, size);
-#pragma omp taskwait
-    left += right;
-    return left;
-}
-
-double parallel_sum2(double *A, size_t row1, size_t row2, size_t start, size_t end, size_t size)
-{
-    size_t length = end - start + 1;
-    if (length < CUTOFF)
-    {
-        return serial_sum2(A, row1, row2, start, end, size);
-    }
-
-    double left;
-    double right;
-    size_t middle = (end - start) / 2;
-#pragma omp task shared(left)
-    left = parallel_sum2(A, row1, row2, start, middle, size);
-#pragma omp task shared(right)
-    right = parallel_sum2(A, row1, row2, middle + 1, end, size);
-#pragma omp taskwait
-    left += right;
-    return left;
-}
-
-double array_sum1(double *A, size_t row, size_t start, size_t end, size_t size)
-{
-    float result;
-#pragma omp parallel
-#pragma omp single nowait
-    result = parallel_sum1(A, row, start, end, size);
-    return result;
-}
-
-double array_sum2(double *A, size_t row1, size_t row2, size_t start, size_t end, size_t size)
-{
-    float result;
-#pragma omp parallel
-#pragma omp single nowait
-    result = parallel_sum2(A, row1, row2, start, end, size);
-    return result;
-}
+/***
+ *       _____ _           _           _
+ *      / ____| |         | |         | |
+ *     | |    | |__   ___ | | ___  ___| | ___   _
+ *     | |    | '_ \ / _ \| |/ _ \/ __| |/ / | | |
+ *     | |____| | | | (_) | |  __/\__ \   <| |_| |
+ *      \_____|_| |_|\___/|_|\___||___/_|\_\\__, |
+ *                                           __/ |
+ *                                          |___/
+ */
 
 double *get_L(double *A, size_t size)
 {
-    print_m(A, size);
     double *L = (double *)malloc(size * size * sizeof(double));
 
     for (size_t i = 0; i < size; i++)
@@ -142,7 +57,7 @@ double *get_L(double *A, size_t size)
             double temp = L[li(i, p, size)];
             acc1 += temp * temp;
         }
-        printf("%f\n\r", diag - acc1);
+
         L[li(i, i, size)] = sqrt(diag - acc1);
 
         for (size_t j = 0; j < size; j++)
@@ -157,30 +72,6 @@ double *get_L(double *A, size_t size)
         }
     }
 
-    return L;
-}
-
-double *parallel_get_L(double *A, size_t size)
-{
-    double *L = (double *)malloc(size * size * sizeof(double));
-
-    for (size_t i = 0; i < size; i++)
-    {
-        printf("%d \n\r", i);
-        double diag = A[li(i, i, size)];
-        double acc1 = 0;
-        acc1 = array_sum1(L, i, 0, i - 1, size);
-        L[li(i, i, size)] = sqrt(diag - acc1);
-
-        for (size_t j = 0; j < size; j++)
-        {
-            double acc2 = 0;
-
-            acc2 = array_sum2(L, i, j, 0, i - 1, size);
-
-            L[li(j, i, size)] = (A[li(j, i, size)] - acc2) / L[li(i, i, size)];
-        }
-    }
     return L;
 }
 
@@ -237,7 +128,32 @@ double *transpose(double *X, size_t size)
     return result;
 }
 
-double *dot(double *A, double *b, size_t size)
+double *cholesky(double *A, double *b, size_t size)
+{
+    double *L = get_L(A, size);
+    double *y = solve_lt(L, b, size);
+    double *LT = transpose(L, size);
+    double *x = solve_ut(LT, y, size);
+
+    free(L);
+    free(LT);
+    free(y);
+
+    return x;
+}
+
+/***
+ *       _____ _           _           _
+ *      / ____| |         | |         | |
+ *     | |    | |__   ___ | | ___  ___| | ___   _
+ *     | |    | '_ \ / _ \| |/ _ \/ __| |/ / | | |
+ *     | |____| | | | (_) | |  __/\__ \   <| |_| |
+ *      \_____|_| |_|\___/|_|\___||___/_|\_\\__, |
+ *                                           __/ |
+ *                                          |___/
+ */
+
+double *dot_matrix_array(double *A, double *b, size_t size)
 {
     double *result = (double *)malloc(size * sizeof(double));
 
@@ -274,35 +190,6 @@ double *dot_matrix(double *A, double *B, size_t size)
     return result;
 }
 
-double *cholesky(double *A, double *b, size_t size)
-{
-    double *L = get_L(A, size);
-    print_m(L, size);
-    double *y = solve_lt(L, b, size);
-    double *LT = transpose(L, size);
-    print_m(LT, size);
-    double *x = solve_ut(LT, y, size);
-
-    free(L);
-    free(LT);
-    free(y);
-
-    return x;
-}
-
-double *parallel_cholesky(double *A, double *b, size_t size)
-{
-    double *L = parallel_get_L(A, size);
-    double *y = solve_lt(L, b, size);
-    double *LT = transpose(L, size);
-    double *x = solve_ut(LT, y, size);
-
-    free(L);
-    free(LT);
-    free(y);
-    printf("B\n\r");
-    return x;
-}
 
 double RMSE(double *a, double *b, size_t size)
 {
@@ -322,78 +209,13 @@ int test()
     double A[9] = {81.0, -45.0, 45.0, -45.0, 50.0, -15.0, 45.0, -15.0, 38};
     double v[3] = {1.0, 1.0, 1.0};
     double *x = cholesky(A, v, 3);
-    double *expected = dot(A, x, 3);
+    double *expected = dot_matrix_array(A, x, 3);
 
     result = RMSE(v, expected, 3) < EPS;
 
     free(expected);
     free(x);
 
-    return result;
-}
-
-int parallel_test()
-{
-    int result = -1;
-    double A[9] = {81.0, -45.0, 45.0, -45.0, 50.0, -15.0, 45.0, -15.0, 38};
-    double v[3] = {1.0, 1.0, 1.0};
-    double *x = parallel_cholesky(A, v, 3);
-
-    double *expected = dot(A, x, 3);
-
-    result = RMSE(v, expected, 3) < EPS;
-
-    free(expected);
-    free(x);
-
-    return result;
-}
-
-int test_sum()
-{
-    int result = -1;
-    double A[9] = {81.0, -45.0, 45.0, -45.0, 50.0, -15.0, 45.0, -15.0, 38};
-    double actual = serial_sum1(A, 0, 0, 2, 3);
-    double expected = 0;
-    for (size_t i = 0; i < 3; i++)
-    {
-        double temp = A[li(0, i, 3)];
-        expected += temp * temp;
-    }
-
-    result = (actual - expected) < EPS;
-    return result;
-}
-
-int parallel_test_sum()
-{
-    int result = -1;
-    double A[9] = {81.0, -45.0, 45.0, -45.0, 50.0, -15.0, 45.0, -15.0, 38};
-    double actual = parallel_sum1(A, 0, 0, 2, 3);
-    double expected = 0;
-    for (size_t i = 0; i < 3; i++)
-    {
-        double temp = A[li(0, i, 3)];
-        expected += temp * temp;
-    }
-
-    result = (actual - expected) < EPS;
-    return result;
-}
-
-int array_sum()
-{
-    int result = -1;
-    double A[9] = {81.0, -45.0, 45.0, -45.0, 50.0, -15.0, 45.0, -15.0, 38};
-    double actual = array_sum1(A, 0, 0, 2, 3);
-    double expected = 0;
-    for (size_t i = 0; i < 3; i++)
-    {
-        double temp = A[li(0, i, 3)];
-        expected += temp * temp;
-    }
-
-    result = (actual - expected) < EPS;
     return result;
 }
 
@@ -423,45 +245,7 @@ double *get_random_matrix(size_t size)
 
 int main(int argc, char *argv[])
 {
-    // printf("main thread: %d\n\r", omp_get_thread_num());
-    // printf("test sum: %d\n\r", test_sum());
-    // printf("parallel test sum: %d\n\r", parallel_test_sum());
-    // printf("array sum: %d\n\r", array_sum());
-    // printf("algo test: %d\n\r", test());
-    // printf("parallel algo test: %d\n\r", parallel_test());
-
-    int n = 20;
-    double *A = get_random_matrix(n);
-    double *b = (double *)malloc(n * sizeof(double));
-
-    for (size_t i = 0; i < n; i++)
-    {
-        b[i] = 1;
-    }
-
-    for (size_t i = 0; i < n; i++)
-    {
-        for (size_t j = 0; j < n; j++)
-        {
-            printf("%f ", A[li(i, j, n)]);
-        }
-        printf("\n\r");
-    }
-    printf("\n\r");
-    for (size_t j = 0; j < n; j++)
-    {
-        printf("%f\n\r", b[j]);
-    }
-    printf("\n\r");
-
-    double *res = cholesky(A, b, n);
-
-    for (size_t i = 0; i < n; i++)
-    {
-        printf("%f ", res[i]);
-    }
-    printf("\n\r");
-
+    printf("algo test: %d\n\r", test());
     _CrtDumpMemoryLeaks();
     return 0;
 }
