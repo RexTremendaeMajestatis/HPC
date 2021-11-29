@@ -8,7 +8,8 @@
 
 
 #define EPS 0.0000001
-#define CUTOFF 200
+
+static int CUTOFF = 150;
 
 size_t li(size_t i, size_t j, size_t size)
 {
@@ -364,25 +365,24 @@ double *get_L(double *A, size_t size)
 
     for (size_t i = 0; i < size; i++)
     {
+        // double acc1 = 0;
+        // for (size_t p = 0; p < i; p++)
+        // {
+        //     double temp = L[li(i, p, size)];
+        //     acc1 += temp * temp;
+        // }
+        double acc1 = array_sum1(L, i, 0, i, size);
         double diag = A[li(i, i, size)];
-        double acc1 = 0;
-        for (size_t p = 0; p < i; p++)
-        {
-            double temp = L[li(i, p, size)];
-            acc1 += temp * temp;
-        }
-        double acc11 = array_sum1(L, i, 0, i, size);
-
         L[li(i, i, size)] = sqrt(diag - acc1);
 
-        for (size_t j = 0; j < size; j++)
+        for (size_t j = i; j < size; j++)
         {
-            double acc2 = 0;
-            for (size_t p = 0; p < i; p++)
-            {
-                acc2 += L[li(i, p, size)] * L[li(j, p, size)];
-            }
-            double acc22 = array_sum2(L, i, j, 0, i, size);
+            // double acc2 = 0;
+            // for (size_t p = 0; p < i; p++)
+            // {
+            //     acc2 += L[li(i, p, size)] * L[li(j, p, size)];
+            // }
+            double acc2 = array_sum2(L, i, j, 0, i, size);
             L[li(j, i, size)] = (A[li(j, i, size)] - acc2) / L[li(i, i, size)];
         }
     }
@@ -396,11 +396,12 @@ double *solve_lt(double *L, double *v, size_t size)
 
     for (size_t i = 0; i < size; i++)
     {
-        double acc = 0;
-        for (size_t j = 0; j < i; j++)
-        {
-            acc += L[li(i, j, size)] * result[j];
-        }
+        // double acc = 0;
+        // for (size_t j = 0; j < i; j++)
+        // {
+        //     acc += L[li(i, j, size)] * result[j];
+        // }
+        double acc = array_sum3(L, v, i, 0, i, size);
 
         result[i] = (v[i] - acc) / L[li(i, i, size)];
     }
@@ -414,11 +415,12 @@ double *solve_ut(double *L, double *v, size_t size)
 
     for (int64_t i = size - 1; i >= 0; i--)
     {
-        double acc = 0;
-        for (size_t j = size - 1; j > i; j--)
-        {
-            acc += L[li(i, j, size)] * result[j];
-        }
+        // double acc = 0;
+        // for (size_t j = size - 1; j > i; j--)
+        // {
+        //     acc += L[li(i, j, size)] * result[j];
+        // }
+        double acc = array_sum4(L, v, i, 0, i, size);
 
         result[i] = (v[i] - acc) / L[li(i, i, size)];
     }
@@ -453,16 +455,17 @@ double *cholesky(double *A, double *b, size_t size)
 
 int main(int argc, char *argv[])
 {
-    omp_set_num_threads(4);
+    int threads = 16;
+    omp_set_num_threads(threads);
     size_t n = 3500;
+    CUTOFF = n / threads;
     double *X = get_random_matrix(n);
     double *v = get_vector(n, 1);
     clock_t begin = clock();
     double *res = cholesky(X, v, n);
     clock_t end = clock();
     double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-    printf("%f\n\r", time_spent);
-    print_v(dot_matrix_array(X, res, n), n);
+    printf("[size: %d, threads: %d, cutoff: %d, time: %f]\n\r", n, threads, CUTOFF, time_spent);
     free(X);
     free(v);
     free(res);
