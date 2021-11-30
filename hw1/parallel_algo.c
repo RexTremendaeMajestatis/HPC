@@ -6,7 +6,6 @@
 #include "time.h"
 #include <stdint.h>
 
-
 #define EPS 0.0000001
 
 static int CUTOFF = 150;
@@ -124,13 +123,25 @@ double *get_vector(size_t size, double val)
     return v;
 }
 
-void print_m(double *A, size_t size)
+double *get_matrix(size_t rows, size_t cols, double val)
 {
-    for (size_t i = 0; i < size; i++)
+    double *m = (double *)malloc(rows * cols * sizeof(double));
+
+    for (size_t i = 0; i < rows * cols; i++)
     {
-        for (size_t j = 0; j < size; j++)
+        m[i] = val;
+    }
+
+    return m;
+}
+
+void print_m(double *A, size_t rows, size_t cols)
+{
+    for (size_t i = 0; i < rows; i++)
+    {
+        for (size_t j = 0; j < cols; j++)
         {
-            printf("%f ", A[li(i, j, size)]);
+            printf("%f ", A[i * cols + j]);
         }
         printf("\n\r");
     }
@@ -365,24 +376,24 @@ double *get_L(double *A, size_t size)
 
     for (size_t i = 0; i < size; i++)
     {
-        // double acc1 = 0;
-        // for (size_t p = 0; p < i; p++)
-        // {
-        //     double temp = L[li(i, p, size)];
-        //     acc1 += temp * temp;
-        // }
-        double acc1 = array_sum1(L, i, 0, i, size);
+        double acc1 = 0;
+        for (size_t p = 0; p < i; p++)
+        {
+            double temp = L[li(i, p, size)];
+            acc1 += temp * temp;
+        }
+        // double acc1 = array_sum1(L, i, 0, i, size);
         double diag = A[li(i, i, size)];
         L[li(i, i, size)] = sqrt(diag - acc1);
 
         for (size_t j = i; j < size; j++)
         {
-            // double acc2 = 0;
-            // for (size_t p = 0; p < i; p++)
-            // {
-            //     acc2 += L[li(i, p, size)] * L[li(j, p, size)];
-            // }
-            double acc2 = array_sum2(L, i, j, 0, i, size);
+            double acc2 = 0;
+            for (size_t p = 0; p < i; p++)
+            {
+                acc2 += L[li(i, p, size)] * L[li(j, p, size)];
+            }
+            // double acc2 = array_sum2(L, i, j, 0, i, size);
             L[li(j, i, size)] = (A[li(j, i, size)] - acc2) / L[li(i, i, size)];
         }
     }
@@ -396,12 +407,12 @@ double *solve_lt(double *L, double *v, size_t size)
 
     for (size_t i = 0; i < size; i++)
     {
-        // double acc = 0;
-        // for (size_t j = 0; j < i; j++)
-        // {
-        //     acc += L[li(i, j, size)] * result[j];
-        // }
-        double acc = array_sum3(L, v, i, 0, i, size);
+        double acc = 0;
+        for (size_t j = 0; j < i; j++)
+        {
+            acc += L[li(i, j, size)] * result[j];
+        }
+        // double acc = array_sum3(L, v, i, 0, i, size);
 
         result[i] = (v[i] - acc) / L[li(i, i, size)];
     }
@@ -415,12 +426,12 @@ double *solve_ut(double *L, double *v, size_t size)
 
     for (int64_t i = size - 1; i >= 0; i--)
     {
-        // double acc = 0;
-        // for (size_t j = size - 1; j > i; j--)
-        // {
-        //     acc += L[li(i, j, size)] * result[j];
-        // }
-        double acc = array_sum4(L, v, i, 0, i, size);
+        double acc = 0;
+        for (size_t j = size - 1; j > i; j--)
+        {
+            acc += L[li(i, j, size)] * result[j];
+        }
+        // double acc = array_sum4(L, v, i, 0, i, size);
 
         result[i] = (v[i] - acc) / L[li(i, i, size)];
     }
@@ -428,7 +439,7 @@ double *solve_ut(double *L, double *v, size_t size)
     return result;
 }
 
-double *cholesky(double *A, double *b, size_t size)
+double *cholesky_v(double *A, double *b, size_t size)
 {
     double *L = get_L(A, size);
     double *y = solve_lt(L, b, size);
@@ -440,6 +451,40 @@ double *cholesky(double *A, double *b, size_t size)
     free(y);
 
     return x;
+}
+
+double *cholesky_m(double *A, double *bn, size_t rows, size_t cols)
+{
+    double *result = (double *)malloc(rows * cols * sizeof(double));
+#pragma omp parallel shared(result)
+#pragma omp single
+    {
+        for (size_t col = 0; col < cols; col++)
+        {
+#pragma omp task
+            {
+                printf("%d\n\r", omp_get_thread_num());
+                double *temp_b = (double *)malloc(rows * sizeof(double));
+
+                for (size_t row = 0; row < rows; row++)
+                {
+                    temp_b[row] = bn[row * cols + col];
+                }
+
+                double *temp_res = cholesky_v(A, temp_b, rows);
+
+                for (size_t row = 0; row < rows; row++)
+                {
+                    result[row * cols + col] = temp_res[row];
+                }
+
+                free(temp_res);
+                free(temp_b);
+            }
+        }
+    }
+
+    return result;
 }
 
 /***
@@ -455,19 +500,34 @@ double *cholesky(double *A, double *b, size_t size)
 
 int main(int argc, char *argv[])
 {
-    int threads = 16;
+    int threads = 1;
     omp_set_num_threads(threads);
     size_t n = 3500;
-    CUTOFF = n / threads;
     double *X = get_random_matrix(n);
-    double *v = get_vector(n, 1);
-    clock_t begin = clock();
-    double *res = cholesky(X, v, n);
-    clock_t end = clock();
-    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-    printf("[size: %d, threads: %d, cutoff: %d, time: %f]\n\r", n, threads, CUTOFF, time_spent);
-    free(X);
-    free(v);
-    free(res);
+
+    {
+        size_t cols = 2;
+        double *b = get_matrix(n, cols, 1);
+        clock_t begin = clock();
+        double *res = cholesky_m(X, b, n, cols);
+        clock_t end = clock();
+        double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+        printf("[size: %d, threads: %d, time: %f]\n\r", n, threads, time_spent);
+        // print_m(res, n, 3);
+        free(b);
+        free(res);
+    }
+
+    // {
+    //     double *v = get_vector(n, 1);
+        // clock_t begin = clock();
+    //     double *res = cholesky_v(X, v, n);
+        // clock_t end = clock();
+    //     double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+    //     printf("[size: %d, threads: %d, cutoff: %d, time: %f]\n\r", n, threads, CUTOFF, time_spent);
+    //     free(X);
+    //     free(v);
+    //     free(res);
+    // }
     return 0;
 }
