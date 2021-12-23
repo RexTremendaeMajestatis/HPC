@@ -73,12 +73,15 @@ size_t cols = 3000, rows = 3000;
 
 int main(int argc, char* argv[])
 {
-    int ProcNum, ProcRank, tmp;
+    int process_cnt;
+    int process_rank;
     MPI_Status status;
+
     MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &ProcNum);
-    MPI_Comm_rank(MPI_COMM_WORLD, &ProcRank);
-    if (ProcRank == 0)
+    MPI_Comm_size(MPI_COMM_WORLD, &process_cnt);
+    MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
+
+    if (process_rank == 0)
     {
         double* A = get_matrix(rows, cols, 1.0);
         double* v = get_vector(cols, 1.0);
@@ -86,30 +89,29 @@ int main(int argc, char* argv[])
         clock_t begin = clock();
         for (size_t row = 0; row < rows; row++)
         {
-            size_t proc = (row % (ProcNum - 1)) + 1;
+            size_t proc = (row % (process_cnt - 1)) + 1;
             double *to_send = concat(A + (cols * row), cols, v, cols);
-            //MPI_Send(A + (cols * row), cols, MPI_DOUBLE, proc, 0, MPI_COMM_WORLD);
             MPI_Send(to_send, 2 * cols, MPI_DOUBLE, proc, 0, MPI_COMM_WORLD);
         }
 
         for (size_t row = 0; row < rows; row++)
         {
             double res = 0;
-            size_t proc = (row % (ProcNum - 1)) + 1;
+            size_t proc = (row % (process_cnt - 1)) + 1;
             MPI_Recv(&res, 1, MPI_DOUBLE, proc, row, MPI_COMM_WORLD, &status);
             result[row] = res;
         }
         clock_t end = clock();
         double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-        printf("[size: %d x %d, threads: %d, time: %f]\n\r", rows, cols, ProcNum, time_spent);
+        printf("[size: %d x %d, threads: %d, time: %f]\n\r", rows, cols, process_cnt, time_spent);
     }
     else
     {
-        int compute_processes = ProcNum - 1;
-        int count = ProcRank <= (rows % compute_processes) ? (rows / compute_processes) + 1 : (rows / compute_processes);
+        int compute_processes = process_cnt - 1;
+        int count = process_rank <= (rows % compute_processes) ? (rows / compute_processes) + 1 : (rows / compute_processes);
         for (int i = 0; i < count; i++)
         {
-            size_t row = (compute_processes * i + ProcRank) - 1;
+            size_t row = (compute_processes * i + process_rank) - 1;
             double* buf = (double*)malloc(2 * cols * sizeof(double));
             MPI_Recv(buf, 2 * cols, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, &status);
             double res = 0;
